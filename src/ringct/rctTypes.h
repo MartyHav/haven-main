@@ -258,6 +258,7 @@ namespace rct {
       RCTTypeBulletproof2 = 4,
       RCTTypeCLSAG = 5,
       RCTTypeCLSAGN = 6,
+      RCTTypeHaven = 7,
     };
     enum RangeProofType { RangeProofBorromean, RangeProofBulletproof, RangeProofMultiOutputBulletproof, RangeProofPaddedBulletproof };
     struct RCTConfig {
@@ -270,6 +271,7 @@ namespace rct {
       ctkeyM mixRing; //the set of all pubkeys / copy
       //pairs that you mix with
       keyV pseudoOuts; //C - for simple rct
+      keyV pseudoOuts_haven; //C - for simple rct
       std::vector<ecdhTuple> ecdhInfo;
       ctkeyV outPk;
       ctkeyV outPk_usd;
@@ -287,19 +289,19 @@ namespace rct {
           FIELD(type)
           if (type == RCTTypeNull)
             return ar.stream().good();
-          if (type != RCTTypeFull && type != RCTTypeSimple && type != RCTTypeBulletproof && type != RCTTypeBulletproof2 && type != RCTTypeCLSAG && type != RCTTypeCLSAGN)
+          if (type != RCTTypeFull && type != RCTTypeSimple && type != RCTTypeBulletproof && type != RCTTypeBulletproof2 && type != RCTTypeCLSAG && type != RCTTypeCLSAGN && type != RCTTypeHaven)
             return false;
           VARINT_FIELD(txnFee)
-	        if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN))
+            if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN) || (type == RCTTypeHaven))
           {
             VARINT_FIELD(txnFee_usd)
-            if (type == RCTTypeCLSAGN)
+            if (type == RCTTypeCLSAGN || type == RCTTypeHaven)
             {
               VARINT_FIELD(txnFee_xasset)
             }
             VARINT_FIELD(txnOffshoreFee)
             VARINT_FIELD(txnOffshoreFee_usd)
-            if (type == RCTTypeCLSAGN)
+            if (type == RCTTypeCLSAGN || type == RCTTypeHaven)
             {
               VARINT_FIELD(txnOffshoreFee_xasset)
             }
@@ -336,7 +338,7 @@ namespace rct {
             return false;
           for (size_t i = 0; i < outputs; ++i)
           {
-            if (type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN)
+            if (type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven)
             {
               ar.begin_object();
               if (!typename Archive<W>::is_saving())
@@ -366,7 +368,7 @@ namespace rct {
               ar.delimit_array();
           }
           ar.end_array();
-          if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN))
+          if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN) || type == RCTTypeHaven)
           {
             ar.tag("outPk_usd");
             ar.begin_array();
@@ -381,7 +383,7 @@ namespace rct {
             }
             ar.end_array();
           }
-          if (type == RCTTypeCLSAGN)
+          if (type == RCTTypeCLSAGN || type == RCTTypeHaven)
           {
             ar.tag("outPk_xasset");
             ar.begin_array();
@@ -405,6 +407,7 @@ namespace rct {
         std::vector<mgSig> MGs; // simple rct has N, full has 1
         std::vector<clsag> CLSAGs;
         keyV pseudoOuts; //C - for simple rct
+        keyV pseudoOuts_haven; //C - for simple rct
 
         // when changing this function, update cryptonote::get_pruned_transaction_weight
         template<bool W, template <bool> class Archive>
@@ -412,12 +415,12 @@ namespace rct {
         {
           if (type == RCTTypeNull)
             return ar.stream().good();
-          if (type != RCTTypeFull && type != RCTTypeSimple && type != RCTTypeBulletproof && type != RCTTypeBulletproof2 && type != RCTTypeCLSAG && type != RCTTypeCLSAGN)
+          if (type != RCTTypeFull && type != RCTTypeSimple && type != RCTTypeBulletproof && type != RCTTypeBulletproof2 && type != RCTTypeCLSAG && type != RCTTypeCLSAGN && type != RCTTypeHaven)
             return false;
-          if (type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN)
+          if (type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven)
           {
             uint32_t nbp = bulletproofs.size();
-           if (type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN)
+           if (type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven)
               VARINT_FIELD(nbp)
             else
               FIELD(nbp)
@@ -452,42 +455,103 @@ namespace rct {
             ar.end_array();
           }
 
-          if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN))
+          if ((type == RCTTypeCLSAG) || (type == RCTTypeCLSAGN) || (type == RCTTypeHaven))
           {
             ar.tag("CLSAGs");
             ar.begin_array();
-            PREPARE_CUSTOM_VECTOR_SERIALIZATION(inputs, CLSAGs);
-            if (CLSAGs.size() != inputs)
-              return false;
+            if (type == RCTTypeHaven) {
+              PREPARE_CUSTOM_VECTOR_SERIALIZATION(inputs*2, CLSAGs);
+              if (CLSAGs.size() != inputs*2)
+                return false;
+            } else {
+              PREPARE_CUSTOM_VECTOR_SERIALIZATION(inputs, CLSAGs);
+              if (CLSAGs.size() != inputs)
+                return false;
+            }
             for (size_t i = 0; i < inputs; ++i)
             {
-              // we save the CLSAGs contents directly, because we want it to save its
-              // arrays without the size prefixes, and the load can't know what size
-              // to expect if it's not in the data
-              ar.begin_object();
-              ar.tag("s");
-              ar.begin_array();
-              PREPARE_CUSTOM_VECTOR_SERIALIZATION(mixin + 1, CLSAGs[i].s);
-              if (CLSAGs[i].s.size() != mixin + 1)
-                return false;
-              for (size_t j = 0; j <= mixin; ++j)
-              {
-                FIELDS(CLSAGs[i].s[j])
-                if (mixin + 1 - j > 1)
-                  ar.delimit_array();
+              if (type == RCTTypeHaven) {
+
+                // we save the CLSAGs contents directly, because we want it to save its
+                // arrays without the size prefixes, and the load can't know what size
+                // to expect if it's not in the data
+                ar.begin_object();
+                ar.tag("s");
+                ar.begin_array();
+                PREPARE_CUSTOM_VECTOR_SERIALIZATION(mixin + 1, CLSAGs[i*2].s);
+                if (CLSAGs[i*2].s.size() != mixin + 1)
+                  return false;
+                for (size_t j = 0; j <= mixin; ++j)
+                  {
+                    FIELDS(CLSAGs[i*2].s[j])
+                      if (mixin + 1 - j > 1)
+                        ar.delimit_array();
+                  }
+                ar.end_array();
+
+                ar.tag("c1");
+                FIELDS(CLSAGs[i*2].c1)
+
+                  // CLSAGs[i*2].I not saved, it can be reconstructed
+                  ar.tag("D");
+                FIELDS(CLSAGs[i*2].D)
+                  ar.end_object();
+
+                ar.delimit_array();
+
+                ar.begin_object();
+                ar.tag("s");
+                ar.begin_array();
+                PREPARE_CUSTOM_VECTOR_SERIALIZATION(mixin + 1, CLSAGs[i*2+1].s);
+                if (CLSAGs[i*2+1].s.size() != mixin + 1)
+                  return false;
+                for (size_t j = 0; j <= mixin; ++j)
+                  {
+                    FIELDS(CLSAGs[i*2+1].s[j])
+                      if (mixin + 1 - j > 1)
+                        ar.delimit_array();
+                  }
+                ar.end_array();
+
+                ar.tag("c1");
+                FIELDS(CLSAGs[i*2+1].c1)
+
+                  // CLSAGs[i].I not saved, it can be reconstructed
+                  ar.tag("D");
+                FIELDS(CLSAGs[i*2+1].D)
+                  ar.end_object();
+
+              } else {
+
+                // we save the CLSAGs contents directly, because we want it to save its
+                // arrays without the size prefixes, and the load can't know what size
+                // to expect if it's not in the data
+                ar.begin_object();
+                ar.tag("s");
+                ar.begin_array();
+                PREPARE_CUSTOM_VECTOR_SERIALIZATION(mixin + 1, CLSAGs[i].s);
+                if (CLSAGs[i].s.size() != mixin + 1)
+                  return false;
+                for (size_t j = 0; j <= mixin; ++j)
+                  {
+                    FIELDS(CLSAGs[i].s[j])
+                      if (mixin + 1 - j > 1)
+                        ar.delimit_array();
+                  }
+                ar.end_array();
+
+                ar.tag("c1");
+                FIELDS(CLSAGs[i].c1)
+
+                  // CLSAGs[i].I not saved, it can be reconstructed
+                  ar.tag("D");
+                FIELDS(CLSAGs[i].D)
+                  ar.end_object();
               }
-              ar.end_array();
-
-              ar.tag("c1");
-              FIELDS(CLSAGs[i].c1)
-
-              // CLSAGs[i].I not saved, it can be reconstructed
-              ar.tag("D");
-              FIELDS(CLSAGs[i].D)
-              ar.end_object();
-
+                
               if (inputs - i > 1)
                  ar.delimit_array();
+
             }
 
             ar.end_array();
@@ -543,7 +607,7 @@ namespace rct {
             }
             ar.end_array();
           }
-          if (type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN)
+          if (type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven)
           {
             ar.tag("pseudoOuts");
             ar.begin_array();
@@ -557,6 +621,21 @@ namespace rct {
                 ar.delimit_array();
             }
             ar.end_array();
+            if (type == RCTTypeHaven)
+            {
+              ar.tag("pseudoOuts_haven");
+              ar.begin_array();
+              PREPARE_CUSTOM_VECTOR_SERIALIZATION(inputs, pseudoOuts_haven);
+              if (pseudoOuts_haven.size() != inputs)
+                return false;
+              for (size_t i = 0; i < inputs; ++i)
+              {
+                FIELDS(pseudoOuts_haven[i])
+                  if (inputs - i > 1)
+                    ar.delimit_array();
+              }
+              ar.end_array();
+            }
           }
           return ar.stream().good();
         }
@@ -567,12 +646,12 @@ namespace rct {
 
         keyV& get_pseudo_outs()
         {
-          return type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN ? p.pseudoOuts : pseudoOuts;
+          return type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven ? p.pseudoOuts : pseudoOuts;
         }
 
         keyV const& get_pseudo_outs() const
         {
-          return type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN ? p.pseudoOuts : pseudoOuts;
+          return type == RCTTypeBulletproof || type == RCTTypeBulletproof2 || type == RCTTypeCLSAG || type == RCTTypeCLSAGN || type == RCTTypeHaven ? p.pseudoOuts : pseudoOuts;
         }
     };
 

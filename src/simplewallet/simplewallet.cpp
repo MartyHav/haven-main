@@ -6788,12 +6788,12 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     local_args.pop_back();
     strSource = local_args.back();
     local_args.pop_back();
-
+    /*
     if (strSource != strDest && m_wallet->use_fork_rules(HF_VERSION_XASSET_FEES_V2, 0)) {
       fail_msg_writer() << tr("Asset conversions are disabled till next fork/update.");
       return true;
     }
-    
+    */
     // Check for the type of offshore TX being done
 
     // Populate the txextra to signify that this is an offshore tx
@@ -6855,12 +6855,12 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
     local_args.pop_back();
     strSource = local_args.back();
     local_args.pop_back();
-
+    /*
     if (strSource != strDest && m_wallet->use_fork_rules(HF_VERSION_XASSET_FEES_V2, 0)) {
       fail_msg_writer() << tr("Asset conversions are disabled till next fork/update.");
       return true;
     }
-
+    */
     // Populate the txextra to signify that this is an offshore / xAsset tx
     std::string offshore_data = strSource + "-" + strDest;
     if (!cryptonote::add_offshore_to_tx_extra(extra, offshore_data)) {

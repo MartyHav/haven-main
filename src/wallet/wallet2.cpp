@@ -2007,7 +2007,7 @@ bool wallet2::get_pricing_record(offshore::pricing_record& pr, const uint64_t he
   {
     // Got the block header - verify the pricing record
     if (res.block_header.pricing_record == offshore::pricing_record()) {
-       MERROR("Invalid pricing record in block header - offshore TXs disabled. Please try again later.");
+       MERROR("Invalid pricing record in block header - offshore TXs disabled. Please try again later. (get_pricing_record)");
        return false;
     }
 
@@ -2035,7 +2035,7 @@ uint64_t wallet2::get_xasset_amount(const uint64_t xusd_amount, const std::strin
   {
     // Got the block header - verify the pricing record
     THROW_WALLET_EXCEPTION_IF(res.block_header.pricing_record == offshore::pricing_record(),
-			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later.");
+			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later. (get_xasset_amount)");
 
     // Now work out the amount
     boost::multiprecision::uint128_t xusd_128 = xusd_amount;
@@ -2083,7 +2083,7 @@ uint64_t wallet2::get_xusd_amount(const uint64_t amount, const std::string asset
   {
     // Got the block header - verify the pricing record
     THROW_WALLET_EXCEPTION_IF(res.block_header.pricing_record == offshore::pricing_record(),
-			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later.");
+			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later. (get_xusd_amount)");
 
     // Now work out the amount
     //double d_xhv_amount = boost::lexical_cast<double>(xhv_amount) / 1000000000000.0;
@@ -2135,7 +2135,7 @@ uint64_t wallet2::get_xhv_amount(const uint64_t xusd_amount, const uint64_t heig
   {
     // Got the block header - verify the pricing record
     THROW_WALLET_EXCEPTION_IF(res.block_header.pricing_record == offshore::pricing_record(),
-			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later.");
+			      error::wallet_internal_error, "Invalid pricing record in block header - offshore TXs disabled. Please try again later. (get_xhv_amount)");
 
     // Now work out the amount
     //double d_xusd_amount = boost::lexical_cast<double>(xusd_amount);
@@ -9974,10 +9974,12 @@ void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry
   ptx.construction_data.extra = tx.extra;
   ptx.construction_data.unlock_time = unlock_time;
   ptx.construction_data.use_rct = true;
-  ptx.construction_data.rct_config = {
+  ptx.construction_data.rct_config = rct_config;
+  /*{
     tx.rct_signatures.p.bulletproofs.empty() ? rct::RangeProofBorromean : rct::RangeProofPaddedBulletproof,
     use_fork_rules(HF_VERSION_CLSAG, 0) ? 3 : use_fork_rules(HF_VERSION_SMALLER_BP, -10) ? 2 : 1
-  };ptx.construction_data.dests = dsts;
+    };*/
+  ptx.construction_data.dests = dsts;
   // record which subaddress indices are being used as inputs
   ptx.construction_data.subaddr_account = subaddr_account;
   ptx.construction_data.subaddr_indices.clear();
@@ -10677,7 +10679,11 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_2(std::vector<cryp
   const bool clsag = use_fork_rules(get_clsag_fork(), 0);
   const rct::RCTConfig rct_config {
     bulletproof ? rct::RangeProofPaddedBulletproof : rct::RangeProofBorromean,
-    bulletproof ? (use_fork_rules(HF_VERSION_XASSET_FULL, 0) ? 4 : (use_fork_rules(HF_VERSION_CLSAG, 0) ? 3 : (use_fork_rules(HF_VERSION_SMALLER_BP, -10) ? 2 : 1))) : 0
+    bulletproof ?
+    (use_fork_rules(HF_VERSION_POC_POV, 0)) ? 5 :
+    (use_fork_rules(HF_VERSION_XASSET_FULL, 0)) ? 4 :
+    (use_fork_rules(HF_VERSION_CLSAG, 0)) ? 3 :
+    (use_fork_rules(HF_VERSION_SMALLER_BP, -10)) ? 2 : 1 : 0
   };
 
   // Check to make sure that only 1 destination is provided if memo data is specified.
@@ -11731,7 +11737,11 @@ std::vector<wallet2::pending_tx> wallet2::create_transactions_from(const crypton
   const bool clsag = use_fork_rules(get_clsag_fork(), 0);
   const rct::RCTConfig rct_config {
     bulletproof ? rct::RangeProofPaddedBulletproof : rct::RangeProofBorromean,
-    bulletproof ? (use_fork_rules(HF_VERSION_XASSET_FULL, 0) ? 4 : (use_fork_rules(HF_VERSION_CLSAG, 0) ? 3 : (use_fork_rules(HF_VERSION_SMALLER_BP, -10) ? 2 : 1))) : 0
+    bulletproof ?
+    (use_fork_rules(HF_VERSION_POC_POV, 0)) ? 5 :
+    (use_fork_rules(HF_VERSION_XASSET_FULL, 0)) ? 4 :
+    (use_fork_rules(HF_VERSION_CLSAG, 0)) ? 3 :
+    (use_fork_rules(HF_VERSION_SMALLER_BP, -10)) ? 2 : 1 : 0
   };
   const uint64_t base_fee  = get_base_fee();
   const uint64_t fee_multiplier = get_fee_multiplier(priority, get_fee_algorithm());

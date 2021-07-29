@@ -3803,9 +3803,17 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
     }
   }
 
-  // only accept rct::RCTTypeCLSAGN and rct::RCTTypeCLSAG txs after xassets fork.
-  if (hf_version >= HF_VERSION_XASSET_FULL) {
+  if (hf_version >= HF_VERSION_POC_POV) {
+    // only accept rct::RCTTypeHaven txs after POC fork.
+    if (tx.rct_signatures.type != rct::RCTTypeHaven) {
+      MERROR_VER("Only Haven CLSAG-based TXs are permitted from v" << HF_VERSION_POC_POV);
+      tvc.m_verifivation_failed = true;
+      return false;
+    }
+  } else if (hf_version >= HF_VERSION_XASSET_FULL) {
+    // only accept rct::RCTTypeCLSAGN and rct::RCTTypeCLSAG txs after xassets fork.
     if (tx.rct_signatures.type != rct::RCTTypeCLSAGN && tx.rct_signatures.type != rct::RCTTypeCLSAG) {
+      MERROR_VER("Only CLSAG-based TXs are permitted from v" << HF_VERSION_XASSET_FULL);
       tvc.m_verifivation_failed = true;
       return false;
     }
@@ -3872,7 +3880,7 @@ bool Blockchain::expand_transaction_2(transaction &tx, const crypto::hash &tx_pr
       }
     }
   }
-  else if (rv.type == rct::RCTTypeSimple || rv.type == rct::RCTTypeBulletproof || rv.type == rct::RCTTypeBulletproof2 || rv.type == rct::RCTTypeCLSAG || rv.type == rct::RCTTypeCLSAGN)
+  else if (rv.type == rct::RCTTypeSimple || rv.type == rct::RCTTypeBulletproof || rv.type == rct::RCTTypeBulletproof2 || rv.type == rct::RCTTypeCLSAG || rv.type == rct::RCTTypeCLSAGN || rv.type == rct::RCTTypeHaven)
   {
     CHECK_AND_ASSERT_MES(!pubkeys.empty() && !pubkeys[0].empty(), false, "empty pubkeys");
     rv.mixRing.resize(pubkeys.size());
@@ -3923,6 +3931,21 @@ bool Blockchain::expand_transaction_2(transaction &tx, const crypto::hash &tx_pr
       for (size_t n = 0; n < tx.vin.size(); ++n)
       {
 	rv.p.CLSAGs[n].I = tx.vin[n].type() == typeid(txin_to_key) ? rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image)
+	  : tx.vin[n].type() == typeid(txin_xasset) ? rct::ki2rct(boost::get<txin_xasset>(tx.vin[n]).k_image)
+	  : tx.vin[n].type() == typeid(txin_offshore) ? rct::ki2rct(boost::get<txin_offshore>(tx.vin[n]).k_image)
+	  : rct::ki2rct(boost::get<txin_onshore>(tx.vin[n]).k_image);
+      }
+    }
+  }
+  else if (rv.type == rct::RCTTypeHaven)
+  {
+    if (!tx.pruned)
+    {
+      // We have 2 CLSAGs per input - one for each proof type
+      CHECK_AND_ASSERT_MES(rv.p.CLSAGs.size() == tx.vin.size() * 2, false, "Bad CLSAGs size");
+      for (size_t n = 0; n < tx.vin.size(); ++n)
+      {
+	rv.p.CLSAGs[n*2].I = rv.p.CLSAGs[n*2+1].I = tx.vin[n].type() == typeid(txin_to_key) ? rct::ki2rct(boost::get<txin_to_key>(tx.vin[n]).k_image)
 	  : tx.vin[n].type() == typeid(txin_xasset) ? rct::ki2rct(boost::get<txin_xasset>(tx.vin[n]).k_image)
 	  : tx.vin[n].type() == typeid(txin_offshore) ? rct::ki2rct(boost::get<txin_offshore>(tx.vin[n]).k_image)
 	  : rct::ki2rct(boost::get<txin_onshore>(tx.vin[n]).k_image);
@@ -4483,6 +4506,7 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
     case rct::RCTTypeBulletproof2:
     case rct::RCTTypeCLSAG:
     case rct::RCTTypeCLSAGN:
+    case rct::RCTTypeHaven:
     {
       // check all this, either reconstructed (so should really pass), or not
       {
@@ -4518,7 +4542,9 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
         }
       }
 
-      const size_t n_sigs = ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) ? rv.p.CLSAGs.size() : rv.p.MGs.size();
+      const size_t n_sigs =
+        (rv.type == rct::RCTTypeHaven) ? rv.p.CLSAGs.size() / 2 :
+        ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) ? rv.p.CLSAGs.size() : rv.p.MGs.size();
       if (n_sigs != tx.vin.size())
       {
         MERROR_VER("Failed to check ringct signatures: mismatched MGs/vin sizes");
@@ -4527,7 +4553,16 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
       for (size_t n = 0; n < tx.vin.size(); ++n)
       {
         if (tx.vin[n].type() == typeid(txin_onshore)) {
-          if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
+          if (rv.type == rct::RCTTypeHaven) {
+            if (memcmp(&boost::get<txin_onshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+            if (memcmp(&boost::get<txin_onshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2+1].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+          } else if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
             if (memcmp(&boost::get<txin_onshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32)) {
               MERROR_VER("Failed to check ringct signatures: mismatched key image");
               return false;
@@ -4539,7 +4574,16 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
             }
           }
         } else if (tx.vin[n].type() == typeid(txin_offshore)) {
-          if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
+          if (rv.type == rct::RCTTypeHaven) {
+            if (memcmp(&boost::get<txin_offshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+            if (memcmp(&boost::get<txin_offshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2+1].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+          } else if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
             if (memcmp(&boost::get<txin_offshore>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32)) {
               MERROR_VER("Failed to check ringct signatures: mismatched key image");
               return false;
@@ -4551,7 +4595,16 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
             }
           }
         } else if (tx.vin[n].type() == typeid(txin_xasset)) {
-          if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
+          if (rv.type == rct::RCTTypeHaven) {
+            if (memcmp(&boost::get<txin_xasset>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+            if (memcmp(&boost::get<txin_xasset>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2+1].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+          } else if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
             if (memcmp(&boost::get<txin_xasset>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32)) {
               MERROR_VER("Failed to check ringct signatures: mismatched key image");
               return false;
@@ -4563,7 +4616,16 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
             }
           }
         } else {
-          if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
+          if (rv.type == rct::RCTTypeHaven) {
+            if (memcmp(&boost::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+            if (memcmp(&boost::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.CLSAGs[n*2+1].I, 32)) {
+              MERROR_VER("Failed to check ringct signatures: mismatched key image");
+              return false;
+            }
+          } else if ((rv.type == rct::RCTTypeCLSAG) || (rv.type == rct::RCTTypeCLSAGN)) {
             if (memcmp(&boost::get<txin_to_key>(tx.vin[n]).k_image, &rv.p.CLSAGs[n].I, 32)) {
               MERROR_VER("Failed to check ringct signatures: mismatched key image");
               return false;

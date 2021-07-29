@@ -1241,12 +1241,17 @@ namespace cryptonote
         tk.key = out_eph_public_key;
         out.target = tk;
         outamounts.push_back(std::pair<std::string, uint64_t>("XHV", dst_entr_clone.amount));
+        outamounts.push_back(std::pair<std::string, uint64_t>("XUSD", dst_entr_clone.amount_usd));
       } else if (dst_entr_clone.asset_type == "XUSD") {
         txout_offshore tk;
         tk.key = out_eph_public_key;
         out.target = tk;
         out.amount = dst_entr_clone.amount_usd;
-         outamounts.push_back(std::pair<std::string, uint64_t>("XUSD", dst_entr_clone.amount_usd));
+        outamounts.push_back(std::pair<std::string, uint64_t>("XUSD", dst_entr_clone.amount_usd));
+	if (strSource == "XHV")
+	  outamounts.push_back(std::pair<std::string, uint64_t>("XHV", dst_entr_clone.amount));
+	else
+	  outamounts.push_back(std::pair<std::string, uint64_t>(strSource, dst_entr_clone.amount_xasset));
       } else {
         txout_xasset tk;
         tk.key = out_eph_public_key;
@@ -1254,6 +1259,7 @@ namespace cryptonote
         out.target = tk;
         out.amount = dst_entr_clone.amount_xasset;
         outamounts.push_back(std::pair<std::string, uint64_t>(dst_entr_clone.asset_type, dst_entr_clone.amount_xasset));
+	outamounts.push_back(std::pair<std::string, uint64_t>("XUSD", dst_entr_clone.amount_usd));
       }
 
       // pusdh to outputs
