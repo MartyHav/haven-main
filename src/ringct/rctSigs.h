@@ -135,10 +135,10 @@ namespace rct {
     bool verRctSemanticsSimple(const std::vector<const rctSig*> & rvv, const offshore::pricing_record pr, const bool offshore, const bool onshore, const bool offshore_to_offshore, const bool xasset_to_xusd, const bool xusd_to_xasset, const bool xasset_transfer, const std::string strSource, const std::string strDest, const xmr_amount amount_burnt, const xmr_amount amount_minted);
   bool verRctNonSemanticsSimple(const rctSig & rv);
   //static inline bool verRctSimple(const rctSig & rv) { return verRctSemanticsSimple(rv) && verRctNonSemanticsSimple(rv); }
-    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev);
-    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev);
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev);
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev);
+  xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev, std::string &asset_type);
+  xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev, std::string &asset_type);
+    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev, std::string &asset_type);
+    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev, std::string &asset_type);
     key get_pre_mlsag_hash(const rctSig &rv, hw::device &hwdev);
     bool signMultisig(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key);
 

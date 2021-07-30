@@ -2119,7 +2119,7 @@ try
     //decodeRct: (c.f. https://eprint.iacr.org/2015/1098 section 5.1.1)
     //   uses the attached ecdh info to find the amounts represented by each output commitment 
     //   must know the destination private key to find the correct amount, else will return a random number    
-    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev) {
+    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev, std::string &asset_type) {
         CHECK_AND_ASSERT_MES(rv.type == RCTTypeFull, false, "decodeRct called on non-full rctSig");
         CHECK_AND_ASSERT_THROW_MES(i < rv.ecdhInfo.size(), "Bad index");
         CHECK_AND_ASSERT_THROW_MES(rv.outPk.size() == rv.ecdhInfo.size(), "Mismatched sizes of rv.outPk and rv.ecdhInfo");
@@ -2144,24 +2144,24 @@ try
         return h2d(amount);
     }
 
-    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev) {
+    xmr_amount decodeRct(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev, std::string &asset_type) {
       key mask;
-      return decodeRct(rv, sk, i, mask, hwdev);
+      return decodeRct(rv, sk, i, mask, hwdev, asset_type);
     }
 
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, key &mask, hw::device &hwdev) {
-        CHECK_AND_ASSERT_MES(rv.type == RCTTypeSimple || rv.type == RCTTypeBulletproof || rv.type == RCTTypeBulletproof2 || rv.type == RCTTypeCLSAG || rv.type == RCTTypeCLSAGN, false, "decodeRct called on non simple rctSig");
+  xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, key &mask, hw::device &hwdev, std::string &asset_type) {
+        CHECK_AND_ASSERT_MES(rv.type == RCTTypeSimple || rv.type == RCTTypeBulletproof || rv.type == RCTTypeBulletproof2 || rv.type == RCTTypeCLSAG || rv.type == RCTTypeCLSAGN || rv.type == RCTTypeHaven, false, "decodeRct called on non simple rctSig");
         CHECK_AND_ASSERT_THROW_MES(i < rv.ecdhInfo.size(), "Bad index");
         CHECK_AND_ASSERT_THROW_MES(rv.outPk.size() == rv.ecdhInfo.size(), "Mismatched sizes of rv.outPk and rv.ecdhInfo");
 
         //mask amount and mask
         ecdhTuple ecdh_info = rv.ecdhInfo[i];
-        hwdev.ecdhDecode(ecdh_info, sk, rv.type == RCTTypeBulletproof2 || rv.type == RCTTypeCLSAG || rv.type == RCTTypeCLSAGN);
+        hwdev.ecdhDecode(ecdh_info, sk, rv.type == RCTTypeBulletproof2 || rv.type == RCTTypeCLSAG || rv.type == RCTTypeCLSAGN || rv.type == RCTTypeHaven);
         mask = ecdh_info.mask;
         key amount = ecdh_info.amount;
         key C;
-	if (!equalKeys(scalarmultH(d2h(0)),rv.outPk[i].mask)) C = rv.outPk[i].mask;
-	else if (!equalKeys(scalarmultH(d2h(0)),rv.outPk_usd[i].mask)) C = rv.outPk_usd[i].mask;
+	if ((asset_type == "XHV") && (!equalKeys(scalarmultH(d2h(0)),rv.outPk[i].mask))) C = rv.outPk[i].mask;
+        else if ((asset_type == "XUSD") && (!equalKeys(scalarmultH(d2h(0)),rv.outPk_usd[i].mask))) C = rv.outPk_usd[i].mask;
 	else if (!equalKeys(scalarmultH(d2h(0)),rv.outPk_xasset[i].mask)) C = rv.outPk_xasset[i].mask;
         DP("C");
         DP(C);
@@ -2177,9 +2177,9 @@ try
         return h2d(amount);
     }
 
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev) {
+  xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev, std::string &asset_type) {
       key mask;
-      return decodeRctSimple(rv, sk, i, mask, hwdev);
+      return decodeRctSimple(rv, sk, i, mask, hwdev, asset_type);
     }
 
     bool signMultisigMLSAG(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key) {

@@ -1850,7 +1850,7 @@ void wallet2::check_acc_out_precomp_once(const tx_out &o, const crypto::key_deri
     already_seen = true;
 }
 //----------------------------------------------------------------------------------------------------
-static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &derivation, unsigned int i, rct::key & mask, hw::device &hwdev)
+static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &derivation, unsigned int i, rct::key & mask, hw::device &hwdev, std::string &asset_type)
 {
   crypto::secret_key scalar1;
   hwdev.derivation_to_scalar(derivation, i, scalar1);
@@ -1864,9 +1864,9 @@ static uint64_t decodeRct(const rct::rctSig & rv, const crypto::key_derivation &
     case rct::RCTTypeCLSAG:
     case rct::RCTTypeCLSAGN:
     case rct::RCTTypeHaven:
-      return rct::decodeRctSimple(rv, rct::sk2rct(scalar1), i, mask, hwdev);
+      return rct::decodeRctSimple(rv, rct::sk2rct(scalar1), i, mask, hwdev, asset_type);
     case rct::RCTTypeFull:
-      return rct::decodeRct(rv, rct::sk2rct(scalar1), i, mask, hwdev);
+      return rct::decodeRct(rv, rct::sk2rct(scalar1), i, mask, hwdev, asset_type);
     default:
       LOG_ERROR("Unsupported rct type: " << rv.type);
       return 0;
@@ -1929,7 +1929,7 @@ void wallet2::scan_output(const cryptonote::transaction &tx, bool miner_tx, cons
   THROW_WALLET_EXCEPTION_IF(std::find(outs.begin(), outs.end(), i) != outs.end(), error::wallet_internal_error, "Same output cannot be added twice");
   if (tx_scan_info.money_transfered == 0 && !miner_tx)
   {
-    tx_scan_info.money_transfered = tools::decodeRct(tx.rct_signatures, tx_scan_info.received->derivation, i, tx_scan_info.mask, m_account.get_device());
+    tx_scan_info.money_transfered = tools::decodeRct(tx.rct_signatures, tx_scan_info.received->derivation, i, tx_scan_info.mask, m_account.get_device(), tx_scan_info.asset_type);
   }
   if (tx_scan_info.money_transfered == 0)
   {
@@ -14106,12 +14106,6 @@ uint64_t wallet2::import_key_images(const std::vector<std::pair<crypto::key_imag
         THROW_WALLET_EXCEPTION_IF(tx_scan_info.error, error::wallet_internal_error, "check_acc_out_precomp failed");
         if (tx_scan_info.received)
         {
-          if (tx_scan_info.money_transfered == 0 && !miner_tx)
-          {
-            rct::key mask;
-            tx_scan_info.money_transfered = tools::decodeRct(spent_tx.rct_signatures, tx_scan_info.received->derivation, output_index, mask, hwdev);
-          }
-
           // get out asset_type
           std::string out_asset;
           if (out.target.type() == typeid(txout_offshore)) {
@@ -14120,6 +14114,12 @@ uint64_t wallet2::import_key_images(const std::vector<std::pair<crypto::key_imag
             out_asset = boost::get<cryptonote::txout_xasset>(out.target).asset_type;
           } else {
             out_asset = "XHV";
+          }
+
+          if (tx_scan_info.money_transfered == 0 && !miner_tx)
+          {
+            rct::key mask;
+            tx_scan_info.money_transfered = tools::decodeRct(spent_tx.rct_signatures, tx_scan_info.received->derivation, output_index, mask, hwdev, out_asset);
           }
 
           THROW_WALLET_EXCEPTION_IF(tx_money_got_in_outs[out_asset] >= std::numeric_limits<uint64_t>::max() - tx_scan_info.money_transfered,
