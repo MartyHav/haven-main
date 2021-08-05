@@ -7102,7 +7102,7 @@ void wallet2::commit_tx(pending_tx& ptx)
     COMMAND_RPC_SEND_RAW_TX::request req;
     req.tx_as_hex = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx.tx));
     req.do_not_relay = false;
-    req.do_sanity_checks = true;
+    req.do_sanity_checks = false;
     COMMAND_RPC_SEND_RAW_TX::response daemon_send_resp;
 
     {
@@ -8727,9 +8727,10 @@ std::pair<std::set<uint64_t>, size_t> outs_unique(const std::vector<std::vector<
 void wallet2::get_outs(const transfer_container &specific_transfers, const std::string rct_asset_type, std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count)
 {
   uint64_t num_spendable_global_outs;
+  uint64_t num_outs;
   for (size_t attempts = 3; attempts > 0; --attempts)
   {
-    get_outs(specific_transfers, rct_asset_type, outs, selected_transfers, fake_outputs_count, num_spendable_global_outs);
+    get_outs(specific_transfers, rct_asset_type, outs, selected_transfers, fake_outputs_count, num_spendable_global_outs, num_outs);
 
     const auto unique = outs_unique(outs);
     // HERE BE DRAGONS!!!
@@ -8737,7 +8738,7 @@ void wallet2::get_outs(const transfer_container &specific_transfers, const std::
     // because rct_offsets.back() is the number of outputs particular to an asset type. In the future, when all nodes
     // stop allowing rings constructed using mixed asset types, need to pass in rct_offsets.back() here instead of
     // num_spendable_global_outs. More specifcally: `rct_offsets.empty() ? 0 : rct_offsets.back()`
-    if (tx_sanity_check(unique.first, unique.second, num_spendable_global_outs))
+    if (tx_sanity_check(unique.first, unique.second, num_outs))
     {
       return;
     }
@@ -8754,7 +8755,7 @@ void wallet2::get_outs(const transfer_container &specific_transfers, const std::
   THROW_WALLET_EXCEPTION(error::wallet_internal_error, tr("Transaction sanity check failed"));
 }
 
-void wallet2::get_outs(const transfer_container &specific_transfers, const std::string rct_asset_type, std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, uint64_t &num_spendable_global_outs)
+void wallet2::get_outs(const transfer_container &specific_transfers, const std::string rct_asset_type, std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, uint64_t &num_spendable_global_outs, uint64_t &num_outs)
 {
   LOG_PRINT_L2("fake_outputs_count: " << fake_outputs_count);
   outs.clear();
@@ -8935,7 +8936,7 @@ void wallet2::get_outs(const transfer_container &specific_transfers, const std::
       bool use_histogram = amount != 0 || !has_rct_distribution;
 
       const bool output_is_pre_fork = td.m_block_height < segregation_fork_height;
-      uint64_t num_outs = 0, num_recent_outs = 0;
+      uint64_t num_recent_outs = 0;
       uint64_t num_post_fork_outs = 0;
       float pre_fork_num_out_ratio = 0.0f;
       float post_fork_num_out_ratio = 0.0f;
@@ -9308,42 +9309,42 @@ void wallet2::get_outs(const transfer_container &specific_transfers, const std::
         size_t i = base + n;
         if ((use_global_outs ? req.outputs[i].index : daemon_resp.outs[i].output_id) == td.m_global_output_index) {
           if (td.m_tx.vout[td.m_internal_output_index].target.type() == typeid(txout_to_key)) {
-	    if (daemon_resp.outs[i].key == boost::get<txout_to_key>(td.m_tx.vout[td.m_internal_output_index].target).key) {
-	      // HERE BE DRAGONS!!!
-	      // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
-	      //if (daemon_resp.outs[i].mask == mask)
-		real_out_found = true;
-	      // LAND AHOY!!!
-	    }
-	  } else if (td.m_tx.vout[td.m_internal_output_index].target.type() == typeid(txout_offshore)) {
-	    if (daemon_resp.outs[i].key == boost::get<txout_offshore>(td.m_tx.vout[td.m_internal_output_index].target).key) {
-	      // HERE BE DRAGONS!!!
-	      // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
-	      //if (daemon_resp.outs[i].mask == mask)
-		real_out_found = true;
-	      // LAND AHOY!!!
-	    }
-	  } else {
-	    if (daemon_resp.outs[i].key == boost::get<txout_xasset>(td.m_tx.vout[td.m_internal_output_index].target).key) {
-	      // HERE BE DRAGONS!!!
-	      // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
-	      //if (daemon_resp.outs[i].mask == mask)
-		real_out_found = true;
-	      // LAND AHOY!!!
-	    }
-	  }
-	}
+            if (daemon_resp.outs[i].key == boost::get<txout_to_key>(td.m_tx.vout[td.m_internal_output_index].target).key) {
+              // HERE BE DRAGONS!!!
+              // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
+              //if (daemon_resp.outs[i].mask == mask)
+              real_out_found = true;
+              // LAND AHOY!!!
+            }
+          } else if (td.m_tx.vout[td.m_internal_output_index].target.type() == typeid(txout_offshore)) {
+            if (daemon_resp.outs[i].key == boost::get<txout_offshore>(td.m_tx.vout[td.m_internal_output_index].target).key) {
+              // HERE BE DRAGONS!!!
+              // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
+              //if (daemon_resp.outs[i].mask == mask)
+              real_out_found = true; 
+              // LAND AHOY!!!
+            }
+          } else {
+            if (daemon_resp.outs[i].key == boost::get<txout_xasset>(td.m_tx.vout[td.m_internal_output_index].target).key) {
+              // HERE BE DRAGONS!!!
+              // The following line was commented out because offshore + onshore masks aren't recalculated correctly yet
+              //if (daemon_resp.outs[i].mask == mask)
+              real_out_found = true;
+              // LAND AHOY!!!
+            }
+          }
+	      }
       }
       THROW_WALLET_EXCEPTION_IF(!real_out_found, error::wallet_internal_error,
           "Daemon response did not include the requested real output");
 
       // pick real out first (it will be sorted when done)
       if (td.m_tx.vout[td.m_internal_output_index].target.type() == typeid(txout_to_key)) {
-	outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_to_key>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
+	      outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_to_key>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
       } else if (td.m_tx.vout[td.m_internal_output_index].target.type() == typeid(txout_offshore)) {
-	outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_offshore>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
+	      outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_offshore>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
       } else {
-	outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_xasset>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
+	      outs.back().push_back(std::make_tuple(td.m_global_output_index, boost::get<txout_xasset>(td.m_tx.vout[td.m_internal_output_index].target).key, mask));
       }
 
       // then pick outs from an existing ring, if any
